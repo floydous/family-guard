@@ -1,52 +1,64 @@
 package id.familyguard.ui.theme
 
 import android.app.Activity
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
+private val LightColorScheme = lightColorScheme(
+    primary = EmeraldPrimary,
+    onPrimary = SurfaceLight,
+    primaryContainer = EmeraldSoftBg,
+    onPrimaryContainer = EmeraldPrimary,
+    secondary = BluePrimary,
+    onSecondary = SurfaceLight,
+    background = BackgroundLight,
+    onBackground = TextPrimaryLight,
+    surface = SurfaceLight,
+    onSurface = TextPrimaryLight,
+    surfaceVariant = SurfaceSubtleLight,
+    onSurfaceVariant = TextSecondaryLight,
+    outline = BorderLight,
+    error = RosePrimary,
+    onError = SurfaceLight
+)
+
 private val DarkColorScheme = darkColorScheme(
-    primary = Emerald400,
-    onPrimary = Slate950,
-    primaryContainer = Slate850,
-    onPrimaryContainer = Emerald400,
-    secondary = Cyan400,
-    onSecondary = Slate950,
-    secondaryContainer = Slate850,
-    onSecondaryContainer = Cyan400,
-    tertiary = Indigo400,
-    onTertiary = Slate950,
-    background = Slate950,
-    onBackground = TextPrimary,
-    surface = Slate900,
-    onSurface = TextPrimary,
-    surfaceVariant = Slate800,
-    onSurfaceVariant = TextSecondary,
-    outline = Slate700,
-    outlineVariant = Slate800,
-    error = Rose400,
-    onError = Slate950,
-    errorContainer = Color(0xFF4C0519),
-    onErrorContainer = Rose400
+    primary = EmeraldLight,
+    onPrimary = BackgroundDark,
+    primaryContainer = EmeraldDarkBg,
+    onPrimaryContainer = EmeraldLight,
+    secondary = BluePrimary,
+    onSecondary = SurfaceDark,
+    background = BackgroundDark,
+    onBackground = TextPrimaryDark,
+    surface = SurfaceDark,
+    onSurface = TextPrimaryDark,
+    surfaceVariant = SurfaceSubtleDark,
+    onSurfaceVariant = TextSecondaryDark,
+    outline = BorderDark,
+    error = RosePrimary,
+    onError = SurfaceDark
 )
 
 @Composable
 fun FamilyGuardTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    val colorScheme = DarkColorScheme
+    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as? Activity)?.window ?: return@SideEffect
-            window.statusBarColor = Slate950.toArgb()
-            window.navigationBarColor = Slate950.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
-            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = false
+            window.statusBarColor = colorScheme.background.toArgb()
+            window.navigationBarColor = colorScheme.background.toArgb()
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
         }
     }
 

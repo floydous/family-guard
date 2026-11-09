@@ -20,8 +20,6 @@ class LocalDnsVpnService : VpnService() {
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
 
-    private val dohResolver = DohUpstreamResolver()
-
     override fun onCreate() {
         super.onCreate()
         seedDefaultRules()
@@ -40,7 +38,7 @@ class LocalDnsVpnService : VpnService() {
     }
 
     private fun seedDefaultRules() {
-        // Seed default high-confidence threat rules (HaGeZi & OISD samples)
+        if (filterTrie.match("scam-bank-login.com").isBlocked) return
         filterTrie.insert("scam-bank-login.com", "Phising Perbankan")
         filterTrie.insert("hadiah-gratis.id", "Scam Penipuan")
         filterTrie.insert("update-system-secure.com", "Malware Adware")
@@ -53,11 +51,10 @@ class LocalDnsVpnService : VpnService() {
 
         try {
             val builder = Builder()
-                .setSession("FamilyGuard DNS Filter")
-                .addAddress("10.10.10.1", 32)
-                .addDnsServer("10.10.10.1")
-                // Only intercept DNS Port 53
-                .addRoute("10.10.10.1", 32)
+                .setSession("FamilyGuard")
+                .addAddress("10.254.1.2", 24)
+                .addDnsServer("10.254.1.1")
+                .addRoute("10.254.1.1", 32)
                 .setBlocking(true)
 
             vpnInterface = builder.establish()
@@ -93,7 +90,9 @@ class LocalDnsVpnService : VpnService() {
                         val responsePacket = IpPacketHelper.buildUdpResponsePacket(dnsContext, sinkholePayload)
 
                         synchronized(outStream) {
-                            outStream.write(responsePacket)
+                            try {
+                                outStream.write(responsePacket)
+                            } catch (ignored: IOException) {}
                         }
 
                         // 2. Trigger non-blocking Heads-Up Notification (throttled)
@@ -103,11 +102,14 @@ class LocalDnsVpnService : VpnService() {
                             filterResult.category ?: "Ancaman Keamanan"
                         )
                     } else {
-                        // Forward legitimate queries to encrypted DoH upstream
+                        // Forward legitimate queries to protected upstream DNS servers
                         launch {
-                            val dohResponse = dohResolver.resolve(dnsContext.dnsPayload)
-                            if (dohResponse != null) {
-                                val responsePacket = IpPacketHelper.buildUdpResponsePacket(dnsContext, dohResponse)
+                            val upstreamResponse = DnsUpstreamForwarder.forward(
+                                this@LocalDnsVpnService,
+                                dnsContext.dnsPayload
+                            )
+                            if (upstreamResponse != null) {
+                                val responsePacket = IpPacketHelper.buildUdpResponsePacket(dnsContext, upstreamResponse)
                                 synchronized(outStream) {
                                     try {
                                         outStream.write(responsePacket)
