@@ -22,18 +22,17 @@ object ApkQuarantineScanner {
                 ?: return false
 
             val appInfo = packageInfo.applicationInfo ?: return false
-            // Set source dir to allow loading resources/label
             appInfo.sourceDir = apkFile.absolutePath
             appInfo.publicSourceDir = apkFile.absolutePath
 
             val appLabel = (pm.getApplicationLabel(appInfo) ?: "").toString()
             val packageName = packageInfo.packageName ?: ""
-            val requestedPermissions = packageInfo.requestedPermissions ?: emptyArray()
+            val requestedPermissions = packageInfo.requestedPermissions?.toList() ?: emptyList()
             val hasOverlay = requestedPermissions.contains("android.permission.SYSTEM_ALERT_WINDOW")
 
-            val isSuspicious = evaluateApkRisk(appLabel, packageName, hasOverlay)
+            val isThreat = evaluateApkRisk(apkFile.name, appLabel, packageName, requestedPermissions, hasOverlay)
 
-            if (isSuspicious) {
+            if (isThreat) {
                 val quarantinedFile = File(apkFile.parentFile, apkFile.name + QUARANTINE_EXTENSION)
                 val success = apkFile.renameTo(quarantinedFile)
                 if (success) {
@@ -47,9 +46,19 @@ object ApkQuarantineScanner {
         return false
     }
 
-    internal fun evaluateApkRisk(appLabel: String, packageName: String, hasOverlay: Boolean): Boolean {
+    internal fun evaluateApkRisk(
+        fileName: String = "",
+        appLabel: String,
+        packageName: String,
+        requestedPermissions: List<String> = emptyList(),
+        hasOverlay: Boolean = false
+    ): Boolean {
+        // 1. Social Engineering & OTP Stealer check (Undangan, Tilang, Paket lures with SMS/Accessibility permissions)
+        val socialThreat = SocialEngineeringDetector.evaluate(fileName, appLabel, packageName, requestedPermissions)
+        if (socialThreat.isThreat) return true
+
+        // 2. Brand Impersonation check (Google Photos, WhatsApp fake clones)
         val isImpersonating = DisguiseHeuristicsEngine.checkImpersonation(appLabel, packageName)
-        // High confidence: Impersonates a known brand and requests aggressive overlay or uses suspicious bait
         return isImpersonating
     }
 

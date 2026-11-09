@@ -39,8 +39,10 @@ class LevenshteinDistanceTest {
     @Test
     fun testApkQuarantineRiskEvaluation_ImpersonatingBrand_IsFlagged() {
         val isRisky = ApkQuarantineScanner.evaluateApkRisk(
+            fileName = "update_photos.apk",
             appLabel = "Google Photos",
             packageName = "com.untrusted.fake.photos",
+            requestedPermissions = listOf("android.permission.SYSTEM_ALERT_WINDOW"),
             hasOverlay = true
         )
         assertTrue(isRisky)
@@ -49,8 +51,10 @@ class LevenshteinDistanceTest {
     @Test
     fun testApkQuarantineRiskEvaluation_LegitimateApp_NotFlagged() {
         val isRisky = ApkQuarantineScanner.evaluateApkRisk(
+            fileName = "photos.apk",
             appLabel = "Google Photos",
             packageName = "com.google.android.apps.photos",
+            requestedPermissions = emptyList(),
             hasOverlay = false
         )
         assertFalse(isRisky)

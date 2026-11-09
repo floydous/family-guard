@@ -25,8 +25,22 @@ object DisguiseHeuristicsEngine {
             val appInfo = pm.getApplicationInfo(packageName, 0)
             val appLabel = pm.getApplicationLabel(appInfo).toString().trim().lowercase()
 
+            val packageInfo = pm.getPackageInfo(packageName, PackageManager.GET_PERMISSIONS)
+            val requestedPermissions = packageInfo.requestedPermissions?.toList() ?: emptyList()
+
+            // 1. Social Engineering & OTP Stealer check (Undangan, Tilang, Paket lures)
+            val socialThreat = SocialEngineeringDetector.evaluate(
+                fileName = "",
+                appLabel = appLabel,
+                packageName = packageName,
+                requestedPermissions = requestedPermissions
+            )
+            if (socialThreat.isThreat && socialThreat.riskScore >= 80) {
+                return true
+            }
+
             val hasHiddenLauncher = isLauncherHidden(pm, packageName)
-            val hasOverlayPermission = hasPermission(context, packageName, "android.permission.SYSTEM_ALERT_WINDOW")
+            val hasOverlayPermission = requestedPermissions.contains("android.permission.SYSTEM_ALERT_WINDOW")
             val isImpersonating = checkImpersonation(appLabel, packageName)
 
             val riskScore = calculateRiskScore(isImpersonating, hasHiddenLauncher, hasOverlayPermission)
