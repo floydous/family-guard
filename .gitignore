@@ -44,3 +44,5 @@ Thumbs.db
 *.swp
 *~
 .pi/
+.claude/
+skills-lock.json
