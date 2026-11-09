@@ -20,7 +20,6 @@ class LocalDnsVpnService : VpnService() {
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
 
-    private val filterTrie = DomainFilterTrie()
     private val dohResolver = DohUpstreamResolver()
 
     override fun onCreate() {
@@ -163,5 +162,7 @@ class LocalDnsVpnService : VpnService() {
         const val ACTION_START = "id.familyguard.action.START_VPN"
         const val ACTION_STOP = "id.familyguard.action.STOP_VPN"
         private const val NOTIFICATION_ID = 1001
+
+        val filterTrie = DomainFilterTrie()
     }
 }
