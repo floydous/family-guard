@@ -22,7 +22,9 @@ class LocalDnsVpnService : VpnService() {
 
     override fun onCreate() {
         super.onCreate()
-        seedDefaultRules()
+        serviceScope.launch(Dispatchers.IO) {
+            loadBlocklists()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -37,19 +39,25 @@ class LocalDnsVpnService : VpnService() {
         return START_STICKY
     }
 
-    private fun seedDefaultRules() {
-        if (filterTrie.match("scam-bank-login.com").isBlocked) return
-        filterTrie.insert("scam-bank-login.com", "Phising Perbankan")
-        filterTrie.insert("hadiah-gratis.id", "Scam Penipuan")
-        filterTrie.insert("update-system-secure.com", "Malware Adware")
-        filterTrie.insert("doubleclick.net", "Pelacak & Iklan Berbahaya")
-        filterTrie.insert("adservice.google.com", "Iklan Agresif")
+    private fun loadBlocklists() {
+        if (filterTrie.size > 0) return
+        try {
+            assets.open("blocklists.gz").use { stream ->
+                filterTrie.loadFromStream(stream)
+            }
+        } catch (e: Exception) {
+            filterTrie.insert("doubleclick.net", "Pelacak & Iklan")
+            filterTrie.insert("adservice.google.com", "Iklan Agresif")
+            filterTrie.insert("scam-bank-login.com", "Phising Perbankan")
+        }
     }
 
     private fun startVpn() {
         if (isRunning) return
 
         try {
+            loadBlocklists()
+
             val builder = Builder()
                 .setSession("FamilyGuard")
                 .addAddress("10.254.1.2", 24)
