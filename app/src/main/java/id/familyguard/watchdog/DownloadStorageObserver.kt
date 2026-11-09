@@ -8,7 +8,7 @@ import java.io.File
 
 class DownloadStorageObserver(
     private val context: Context,
-    private val targetDirectory: File = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+    private val targetDirectory: File = getDefaultDownloadsDirectory()
 ) {
 
     private var fileObserver: FileObserver? = null
@@ -47,7 +47,7 @@ class DownloadStorageObserver(
 
     private fun handleFileEvent(event: Int, path: String?) {
         if (path == null) return
-        // Ignore in-progress Chrome/browser downloads
+        // Ignore in-progress browser downloads
         if (path.endsWith(".crdownload", ignoreCase = true) || path.endsWith(".tmp", ignoreCase = true)) {
             return
         }
@@ -57,6 +57,13 @@ class DownloadStorageObserver(
             if (apkFile.exists()) {
                 ApkQuarantineScanner.scanAndQuarantine(context, apkFile)
             }
+        }
+    }
+
+    companion object {
+        @Suppress("DEPRECATION")
+        private fun getDefaultDownloadsDirectory(): File {
+            return Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
         }
     }
 }
