@@ -41,7 +41,7 @@ class IpPacketHelperTest {
     @Test
     fun testBuildUdpResponsePacket_ConstructsValidSwappedPacket() {
         val context = IpPacketHelper.DnsPacketContext(
-            clientIp = byteArrayOf(192, 168, 1, 100.toByte()),
+            clientIp = byteArrayOf(192.toByte(), 168.toByte(), 1.toByte(), 100.toByte()),
             serverIp = byteArrayOf(10, 10, 10, 1),
             clientPort = 60000,
             dnsPayload = byteArrayOf(1, 2)
