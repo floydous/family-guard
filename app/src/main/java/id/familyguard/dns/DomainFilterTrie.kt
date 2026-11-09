@@ -1,15 +1,17 @@
 package id.familyguard.dns
 
+import java.io.BufferedReader
+import java.io.InputStream
+import java.io.InputStreamReader
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
+import java.util.zip.GZIPInputStream
+
 class DomainFilterTrie {
 
-    private class Node {
-        var isBlocked: Boolean = false
-        var category: String? = null
-        val children: MutableMap<String, Node> = HashMap()
-    }
-
-    private val root = Node()
-    private val whitelist: MutableSet<String> = HashSet()
+    // High-performance hash set holding root wildcard rules (O(1) suffix search)
+    private val blockedDomains: MutableSet<String> = Collections.newSetFromMap(ConcurrentHashMap())
+    private val whitelist: MutableSet<String> = Collections.newSetFromMap(ConcurrentHashMap())
 
     data class FilterResult(
         val isBlocked: Boolean,
@@ -17,27 +19,58 @@ class DomainFilterTrie {
         val category: String? = null
     )
 
+    val size: Int
+        get() = blockedDomains.size
+
     /**
-     * Inserts a domain rule into the reverse-trie (e.g., "ad.tracker.com" -> com -> tracker -> ad).
+     * Inserts a single root domain rule (blocks the domain and all its subdomains).
      */
-    fun insert(domain: String, category: String = "Malware/Phising") {
-        val cleanDomain = domain.trim().lowercase().removePrefix("www.")
-        if (cleanDomain.isEmpty()) return
-
-        val parts = cleanDomain.split('.').reversed()
-        var current = root
-
-        for (part in parts) {
-            current = current.children.getOrPut(part) { Node() }
+    fun insert(domain: String, category: String = "Iklan, Pelacak & Phising") {
+        val cleanDomain = domain.trim().lowercase().removePrefix("www.").removePrefix("*.")
+        if (cleanDomain.isNotEmpty() && cleanDomain.contains('.')) {
+            blockedDomains.add(cleanDomain)
         }
-
-        current.isBlocked = true
-        current.category = category
     }
 
     /**
-     * Checks if a domain (or any of its parent domains) is blocked.
-     * Evaluates right-to-left: e.g. checking "a.b.scam.com" checks "scam.com" then "b.scam.com", etc.
+     * Loads hundreds of thousands of official blocklist rules from an asset stream (supports .gz).
+     */
+    fun loadFromStream(inputStream: InputStream) {
+        val stream = if (isGzipStream(inputStream)) {
+            GZIPInputStream(inputStream)
+        } else {
+            inputStream
+        }
+
+        BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).useLines { lines ->
+            for (line in lines) {
+                val trimmed = line.trim()
+                if (trimmed.isNotEmpty() && !trimmed.startsWith("#") && !trimmed.startsWith("!")) {
+                    val clean = trimmed.removePrefix("0.0.0.0").removePrefix("127.0.0.1").trim().removePrefix("*.")
+                    if (clean.contains('.')) {
+                        blockedDomains.add(clean)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun isGzipStream(inputStream: InputStream): Boolean {
+        // GZIP magic number: 0x1f, 0x8b
+        return try {
+            inputStream.mark(2)
+            val byte1 = inputStream.read()
+            val byte2 = inputStream.read()
+            inputStream.reset()
+            byte1 == 0x1F && byte2 == 0x8B
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Checks if a domain or any of its parent domains is present in the blocklist.
+     * Evaluates suffixes from specific to root (e.g., a.b.ads.com -> b.ads.com -> ads.com).
      */
     fun match(domain: String): FilterResult {
         val cleanDomain = domain.trim().lowercase().removePrefix("www.")
@@ -48,23 +81,22 @@ class DomainFilterTrie {
             return FilterResult(false)
         }
 
-        val parts = cleanDomain.split('.').reversed()
-        var current = root
-        var matchedDomainParts = mutableListOf<String>()
-
-        for (part in parts) {
-            val child = current.children[part] ?: break
-            matchedDomainParts.add(part)
-            current = child
-
-            if (current.isBlocked) {
-                val matchedRule = matchedDomainParts.reversed().joinToString(".")
+        var candidate = cleanDomain
+        while (true) {
+            if (blockedDomains.contains(candidate)) {
                 return FilterResult(
                     isBlocked = true,
-                    matchedRule = matchedRule,
-                    category = current.category ?: "Ancaman Keamanan"
+                    matchedRule = candidate,
+                    category = "Iklan, Pelacak & Phising"
                 )
             }
+
+            val dotIndex = candidate.indexOf('.')
+            if (dotIndex == -1) break
+            candidate = candidate.substring(dotIndex + 1)
+
+            // Stop at top-level domain alone (don't check standalone ".com", ".net", ".id")
+            if (!candidate.contains('.')) break
         }
 
         return FilterResult(false)
@@ -86,7 +118,7 @@ class DomainFilterTrie {
     }
 
     fun clear() {
-        root.children.clear()
+        blockedDomains.clear()
         whitelist.clear()
     }
 }

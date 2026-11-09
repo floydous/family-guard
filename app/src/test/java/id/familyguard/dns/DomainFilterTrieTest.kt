@@ -69,4 +69,21 @@ class DomainFilterTrieTest {
         assertTrue(trie.match("other.doubleclick.net").isBlocked)
         assertTrue(trie.match("doubleclick.net").isBlocked)
     }
+
+    @Test
+    fun testLoadFromStream_GzipBlocklist_CorrectlyLoadsAndMatches() {
+        val testRules = "adservice.google.com\npagead2.googlesyndication.com\nanalytics.google.com\n"
+        val byteOut = java.io.ByteArrayOutputStream()
+        java.util.zip.GZIPOutputStream(byteOut).use { gz ->
+            gz.write(testRules.toByteArray(Charsets.UTF_8))
+        }
+
+        val testTrie = DomainFilterTrie()
+        testTrie.loadFromStream(java.io.ByteArrayInputStream(byteOut.toByteArray()))
+
+        assertEquals(3, testTrie.size)
+        assertTrue(testTrie.match("adservice.google.com").isBlocked)
+        assertTrue(testTrie.match("sub.pagead2.googlesyndication.com").isBlocked)
+        assertFalse(testTrie.match("google.com").isBlocked)
+    }
 }
