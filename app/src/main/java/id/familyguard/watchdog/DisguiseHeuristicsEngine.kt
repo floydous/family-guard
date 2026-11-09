@@ -68,7 +68,7 @@ object DisguiseHeuristicsEngine {
         }
     }
 
-    private fun checkImpersonation(appLabel: String, packageName: String): Boolean {
+    internal fun checkImpersonation(appLabel: String, packageName: String): Boolean {
         for ((targetBrand, validPackages) in OFFICIAL_APP_CATALOG) {
             if (appLabel == targetBrand || appLabel.contains(targetBrand)) {
                 if (!validPackages.contains(packageName)) {
