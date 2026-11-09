@@ -7,13 +7,12 @@ import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import id.familyguard.FamilyGuardApp
+import id.familyguard.data.AppPreferencesRepository
 import id.familyguard.ui.MainActivity
 import kotlinx.coroutines.*
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
-import java.net.Inet4Address
-import java.net.Inet6Address
 import java.net.InetAddress
 
 class LocalDnsVpnService : VpnService() {
@@ -28,8 +27,11 @@ class LocalDnsVpnService : VpnService() {
     @Volatile
     private var activeDnsServers: List<InetAddress> = emptyList()
 
+    private lateinit var prefs: AppPreferencesRepository
+
     override fun onCreate() {
         super.onCreate()
+        prefs = AppPreferencesRepository(this)
         serviceScope.launch(Dispatchers.IO) {
             loadBlocklists()
         }
@@ -123,36 +125,14 @@ class LocalDnsVpnService : VpnService() {
                 setUnderlyingNetworks(arrayOf(currentNetwork))
             }
 
+            // Only divert DNS port 53 to our local tunnel IP 10.254.1.1
+            // Never add routes for public DNS resolvers (1.1.1.1/8.8.8.8) so the forwarder can reach them over physical link
             val builder = Builder()
                 .setSession("FamilyGuard")
                 .addAddress("10.254.1.2", 24)
                 .addDnsServer("10.254.1.1")
                 .addRoute("10.254.1.1", 32)
-
-            // 1. Dynamically route all physical DNS servers discovered from underlying network
-            activeDnsServers = discoverPhysicalDnsServers()
-            for (dns in activeDnsServers) {
-                when (dns) {
-                    is Inet4Address -> builder.addRoute(dns, 32)
-                    is Inet6Address -> builder.addRoute(dns, 128)
-                }
-            }
-
-            // 2. Route common public resolvers used by browser DNS prefetchers (RFC 6890)
-            val commonResolvers = listOf(
-                InetAddress.getByAddress(byteArrayOf(1, 1, 1, 1)),
-                InetAddress.getByAddress(byteArrayOf(1, 0, 0, 1)),
-                InetAddress.getByAddress(byteArrayOf(8, 8, 8, 8)),
-                InetAddress.getByAddress(byteArrayOf(8, 8, 4, 4)),
-                InetAddress.getByAddress(byteArrayOf(9, 9, 9, 9))
-            )
-            for (resolver in commonResolvers) {
-                if (resolver is Inet4Address) {
-                    builder.addRoute(resolver, 32)
-                }
-            }
-
-            builder.setBlocking(true)
+                .setBlocking(true)
 
             vpnInterface = builder.establish()
             isRunning = true
@@ -183,7 +163,7 @@ class LocalDnsVpnService : VpnService() {
                     val filterResult = filterTrie.match(query.domain)
 
                     if (filterResult.isBlocked) {
-                        // Synthesize 0.0.0.0 Sinkhole response
+                        // 1. Synthesize 0.0.0.0 Sinkhole response immediately
                         val sinkholePayload = DnsPacketParser.buildSinkholeResponse(query)
                         val responsePacket = IpPacketHelper.buildUdpResponsePacket(dnsContext, sinkholePayload)
 
@@ -193,12 +173,10 @@ class LocalDnsVpnService : VpnService() {
                             } catch (ignored: IOException) {}
                         }
 
-                        // Trigger direct full-screen advisory and high-priority notification
-                        ThreatNotifier.notifyThreatBlocked(
-                            this@LocalDnsVpnService,
-                            query.domain,
-                            filterResult.category ?: "Ancaman Keamanan"
-                        )
+                        // 2. Record blocked domain silently to dashboard log (NO NOTIFICATION SPAM for background ad requests)
+                        try {
+                            prefs.recordBlockedThreat(query.domain, filterResult.category ?: "Iklan & Pelacak")
+                        } catch (ignored: Exception) {}
                     } else {
                         // 1. Check in-memory LRU TTL Cache first (0.00ms instantaneous response)
                         val cachedResponse = dnsCache.get(query.domain, query.qType, query.transactionId)
