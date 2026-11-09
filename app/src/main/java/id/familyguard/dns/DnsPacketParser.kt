@@ -36,6 +36,9 @@ object DnsPacketParser {
         val qdCount = buffer.short.toInt() and 0xFFFF
         if (qdCount < 1) return null
 
+        // Skip ANCOUNT (2 bytes), NSCOUNT (2 bytes), and ARCOUNT (2 bytes) to reach Question section
+        buffer.position(12)
+
         // Parse Question section
         val domainBuilder = StringBuilder()
         while (buffer.hasRemaining()) {
