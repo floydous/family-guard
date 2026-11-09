@@ -57,7 +57,7 @@ object ApkQuarantineScanner {
         val notificationManager = context.getSystemService(NotificationManager::class.java) ?: return
 
         val notification = NotificationCompat.Builder(context, FamilyGuardApp.CHANNEL_THREAT_ALERTS)
-            .setContentTitle("🛡️ Berkas Berbahaya Dikarantina")
+            .setContentTitle("FamilyGuard: Berkas Dikarantina")
             .setContentText("Aplikasi penyamar '$appLabel' ($fileName) berhasil dinetralisir dari unduhan.")
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setPriority(NotificationCompat.PRIORITY_HIGH)

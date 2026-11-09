@@ -67,7 +67,19 @@ class LocalDnsVpnService : VpnService() {
                 .addAddress("10.254.1.2", 24)
                 .addDnsServer("10.254.1.1")
                 .addRoute("10.254.1.1", 32)
-                .setBlocking(true)
+
+            // Intercept direct queries to public resolvers (prevents Chrome & apps from bypassing VPN)
+            val publicDnsRoutes = listOf(
+                "1.1.1.1", "1.0.0.1",         // Cloudflare
+                "8.8.8.8", "8.8.4.4",         // Google
+                "9.9.9.9", "149.112.112.112",   // Quad9
+                "208.67.222.222", "208.67.220.220" // OpenDNS
+            )
+            for (dnsIp in publicDnsRoutes) {
+                builder.addRoute(dnsIp, 32)
+            }
+
+            builder.setBlocking(true)
 
             vpnInterface = builder.establish()
             isRunning = true

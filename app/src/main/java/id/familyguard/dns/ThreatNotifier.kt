@@ -23,13 +23,20 @@ object ThreatNotifier {
         }
         lastAlertTime[domain] = now
 
-        val notificationManager = context.getSystemService(NotificationManager::class.java) ?: return
-
         val advisoryIntent = Intent(context, ThreatAdvisoryActivity::class.java).apply {
             putExtra(ThreatAdvisoryActivity.EXTRA_TARGET_DOMAIN, domain)
             putExtra(ThreatAdvisoryActivity.EXTRA_THREAT_CATEGORY, category)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
+
+        // Attempt direct full-screen presentation
+        try {
+            context.startActivity(advisoryIntent)
+        } catch (e: Exception) {
+            // Android 10+ background activity start restrictions; handled via FullScreenIntent below
+        }
+
+        val notificationManager = context.getSystemService(NotificationManager::class.java) ?: return
 
         val pendingIntent = PendingIntent.getActivity(
             context,
@@ -40,14 +47,15 @@ object ThreatNotifier {
 
         val notification = NotificationCompat.Builder(context, FamilyGuardApp.CHANNEL_THREAT_ALERTS)
             .setSmallIcon(android.R.drawable.stat_sys_warning)
-            .setContentTitle("🛡️ FamilyGuard: Ancaman Diblokir!")
-            .setContentText("Akses ke situs mencurigakan '$domain' berhasil dicegah.")
+            .setContentTitle("FamilyGuard: Akses Dicegah")
+            .setContentText("Situs '$domain' diblokir ($category).")
             .setStyle(
                 NotificationCompat.BigTextStyle()
-                    .bigText("Akses ke situs mencurigakan '$domain' ($category) dicegah demi keselamatan keluarga. Sentuh untuk melihat detail keamanan.")
+                    .bigText("Akses ke '$domain' ($category) dicegah demi keselamatan keluarga. Sentuh untuk melihat detail keamanan.")
             )
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setFullScreenIntent(pendingIntent, true)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .build()
