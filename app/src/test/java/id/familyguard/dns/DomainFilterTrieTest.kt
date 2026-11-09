@@ -86,4 +86,16 @@ class DomainFilterTrieTest {
         assertTrue(testTrie.match("sub.pagead2.googlesyndication.com").isBlocked)
         assertFalse(testTrie.match("google.com").isBlocked)
     }
+
+    @Test
+    fun testLoadFromStream_PlainTextStream_CorrectlyLoadsAndMatches() {
+        val testRules = "doubleclick.net\nscam-bank.com\n"
+        val testTrie = DomainFilterTrie()
+        testTrie.loadFromStream(java.io.ByteArrayInputStream(testRules.toByteArray(Charsets.UTF_8)))
+
+        assertEquals(2, testTrie.size)
+        assertTrue(testTrie.match("doubleclick.net").isBlocked)
+        assertTrue(testTrie.match("ad.doubleclick.net").isBlocked)
+        assertFalse(testTrie.match("google.com").isBlocked)
+    }
 }

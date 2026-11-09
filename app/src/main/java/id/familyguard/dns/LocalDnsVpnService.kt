@@ -4,6 +4,7 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import id.familyguard.FamilyGuardApp
 import id.familyguard.ui.MainActivity
@@ -40,15 +41,18 @@ class LocalDnsVpnService : VpnService() {
     }
 
     private fun loadBlocklists() {
-        if (filterTrie.size > 0) return
+        if (filterTrie.size > 1000) return
+        val assetNames = assets.list("") ?: emptyArray()
+        val filename = if (assetNames.contains("blocklists.txt")) "blocklists.txt" else "blocklists"
+
         try {
-            assets.open("blocklists.gz").use { stream ->
+            assets.open(filename).use { stream ->
                 filterTrie.loadFromStream(stream)
             }
-        } catch (e: Exception) {
-            filterTrie.insert("doubleclick.net", "Pelacak & Iklan")
-            filterTrie.insert("adservice.google.com", "Iklan Agresif")
-            filterTrie.insert("scam-bank-login.com", "Phising Perbankan")
+            Log.i(TAG, "Successfully loaded ${filterTrie.size} official blocklist rules from assets/$filename")
+        } catch (e: IOException) {
+            Log.e(TAG, "Critical error: unable to load blocklist asset '$filename'", e)
+            throw IllegalStateException("Blocklist asset '$filename' is missing or unreadable", e)
         }
     }
 
@@ -169,6 +173,7 @@ class LocalDnsVpnService : VpnService() {
         .build()
 
     companion object {
+        private const val TAG = "LocalDnsVpnService"
         const val ACTION_START = "id.familyguard.action.START_VPN"
         const val ACTION_STOP = "id.familyguard.action.STOP_VPN"
         private const val NOTIFICATION_ID = 1001
