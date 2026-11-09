@@ -33,13 +33,19 @@ class DomainFilterTrie {
     }
 
     /**
-     * Loads hundreds of thousands of official blocklist rules from an asset stream (supports .gz).
+     * Loads hundreds of thousands of official blocklist rules from an asset stream (supports plain text or .gz).
      */
-    fun loadFromStream(inputStream: InputStream) {
-        val stream = if (isGzipStream(inputStream)) {
-            GZIPInputStream(inputStream)
+    fun loadFromStream(rawStream: InputStream) {
+        val buffered = if (rawStream is java.io.BufferedInputStream) rawStream else java.io.BufferedInputStream(rawStream)
+        buffered.mark(2)
+        val b1 = buffered.read()
+        val b2 = buffered.read()
+        buffered.reset()
+
+        val stream = if (b1 == 0x1F && b2 == 0x8B) {
+            GZIPInputStream(buffered)
         } else {
-            inputStream
+            buffered
         }
 
         BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).useLines { lines ->
@@ -52,19 +58,6 @@ class DomainFilterTrie {
                     }
                 }
             }
-        }
-    }
-
-    private fun isGzipStream(inputStream: InputStream): Boolean {
-        // GZIP magic number: 0x1f, 0x8b
-        return try {
-            inputStream.mark(2)
-            val byte1 = inputStream.read()
-            val byte2 = inputStream.read()
-            inputStream.reset()
-            byte1 == 0x1F && byte2 == 0x8B
-        } catch (e: Exception) {
-            false
         }
     }
 
