@@ -9,8 +9,8 @@ import java.util.zip.GZIPInputStream
 
 class DomainFilterTrie {
 
-    // High-performance hash set holding root wildcard rules (O(1) suffix search)
-    private val blockedDomains: MutableSet<String> = Collections.newSetFromMap(ConcurrentHashMap())
+    // High-performance map holding root wildcard rules (O(1) suffix search with category)
+    private val blockedDomains: MutableMap<String, String> = ConcurrentHashMap()
     private val whitelist: MutableSet<String> = Collections.newSetFromMap(ConcurrentHashMap())
 
     data class FilterResult(
@@ -23,12 +23,12 @@ class DomainFilterTrie {
         get() = blockedDomains.size
 
     /**
-     * Inserts a single root domain rule (blocks the domain and all its subdomains).
+     * Inserts a single root domain rule with category (blocks the domain and all its subdomains).
      */
     fun insert(domain: String, category: String = "Iklan, Pelacak & Phising") {
         val cleanDomain = domain.trim().lowercase().removePrefix("www.").removePrefix("*.")
         if (cleanDomain.isNotEmpty() && cleanDomain.contains('.')) {
-            blockedDomains.add(cleanDomain)
+            blockedDomains[cleanDomain] = category
         }
     }
 
@@ -48,7 +48,7 @@ class DomainFilterTrie {
                 if (trimmed.isNotEmpty() && !trimmed.startsWith("#") && !trimmed.startsWith("!")) {
                     val clean = trimmed.removePrefix("0.0.0.0").removePrefix("127.0.0.1").trim().removePrefix("*.")
                     if (clean.contains('.')) {
-                        blockedDomains.add(clean)
+                        blockedDomains[clean] = "Iklan, Pelacak & Phising"
                     }
                 }
             }
@@ -83,11 +83,12 @@ class DomainFilterTrie {
 
         var candidate = cleanDomain
         while (true) {
-            if (blockedDomains.contains(candidate)) {
+            val category = blockedDomains[candidate]
+            if (category != null) {
                 return FilterResult(
                     isBlocked = true,
                     matchedRule = candidate,
-                    category = "Iklan, Pelacak & Phising"
+                    category = category
                 )
             }
 
