@@ -1,5 +1,6 @@
 package id.familyguard.ui
 
+import android.app.Activity
 import android.content.Intent
 import android.net.VpnService
 import android.os.Bundle
@@ -117,7 +118,7 @@ fun DashboardScreen(
     val vpnLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == ComponentActivity.RESULT_OK) {
+        if (result.resultCode == Activity.RESULT_OK) {
             isDnsActive = true
             val startIntent = Intent(context, LocalDnsVpnService::class.java).apply {
                 action = LocalDnsVpnService.ACTION_START
