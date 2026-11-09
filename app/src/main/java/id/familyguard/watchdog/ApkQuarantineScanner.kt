@@ -47,11 +47,11 @@ object ApkQuarantineScanner {
     }
 
     internal fun evaluateApkRisk(
-        fileName: String,
+        fileName: String = "",
         appLabel: String,
         packageName: String,
-        requestedPermissions: List<String>,
-        hasOverlay: Boolean
+        requestedPermissions: List<String> = emptyList(),
+        hasOverlay: Boolean = false
     ): Boolean {
         // 1. Social Engineering & OTP Stealer check (Undangan, Tilang, Paket lures with SMS/Accessibility permissions)
         val socialThreat = SocialEngineeringDetector.evaluate(fileName, appLabel, packageName, requestedPermissions)
