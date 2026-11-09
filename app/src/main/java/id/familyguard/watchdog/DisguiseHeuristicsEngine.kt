@@ -69,8 +69,9 @@ object DisguiseHeuristicsEngine {
     }
 
     internal fun checkImpersonation(appLabel: String, packageName: String): Boolean {
+        val normalizedLabel = appLabel.trim().lowercase()
         for ((targetBrand, validPackages) in OFFICIAL_APP_CATALOG) {
-            if (appLabel == targetBrand || appLabel.contains(targetBrand)) {
+            if (normalizedLabel == targetBrand || normalizedLabel.contains(targetBrand)) {
                 if (!validPackages.contains(packageName)) {
                     return true
                 }
