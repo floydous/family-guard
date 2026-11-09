@@ -200,19 +200,33 @@ class LocalDnsVpnService : VpnService() {
                             filterResult.category ?: "Ancaman Keamanan"
                         )
                     } else {
-                        // Forward legitimate queries dynamically to physical/upstream DNS
-                        launch {
-                            val upstreamResponse = DnsUpstreamForwarder.forward(
-                                this@LocalDnsVpnService,
-                                dnsContext.dnsPayload,
-                                activeDnsServers
-                            )
-                            if (upstreamResponse != null) {
-                                val responsePacket = IpPacketHelper.buildUdpResponsePacket(dnsContext, upstreamResponse)
-                                synchronized(outStream) {
-                                    try {
-                                        outStream.write(responsePacket)
-                                    } catch (ignored: IOException) {}
+                        // 1. Check in-memory LRU TTL Cache first (0.00ms instantaneous response)
+                        val cachedResponse = dnsCache.get(query.domain, query.qType, query.transactionId)
+                        if (cachedResponse != null) {
+                            val responsePacket = IpPacketHelper.buildUdpResponsePacket(dnsContext, cachedResponse)
+                            synchronized(outStream) {
+                                try {
+                                    outStream.write(responsePacket)
+                                } catch (ignored: IOException) {}
+                            }
+                        } else {
+                            // 2. Cache miss: Forward query dynamically to physical/upstream DNS
+                            launch {
+                                val upstreamResponse = DnsUpstreamForwarder.forward(
+                                    this@LocalDnsVpnService,
+                                    dnsContext.dnsPayload,
+                                    activeDnsServers
+                                )
+                                if (upstreamResponse != null) {
+                                    // Cache response with extracted TTL for subsequent lookups
+                                    dnsCache.put(query.domain, query.qType, upstreamResponse)
+
+                                    val responsePacket = IpPacketHelper.buildUdpResponsePacket(dnsContext, upstreamResponse)
+                                    synchronized(outStream) {
+                                        try {
+                                            outStream.write(responsePacket)
+                                        } catch (ignored: IOException) {}
+                                    }
                                 }
                             }
                         }
@@ -267,5 +281,6 @@ class LocalDnsVpnService : VpnService() {
         private const val NOTIFICATION_ID = 1001
 
         val filterTrie = DomainFilterTrie()
+        val dnsCache = DnsLruCache()
     }
 }
