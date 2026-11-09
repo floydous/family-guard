@@ -2,7 +2,7 @@ package id.familyguard.dns
 
 import android.app.PendingIntent
 import android.content.Intent
-import android.net.VpnService
+import android.net.*
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -12,6 +12,9 @@ import kotlinx.coroutines.*
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
+import java.net.Inet4Address
+import java.net.Inet6Address
+import java.net.InetAddress
 
 class LocalDnsVpnService : VpnService() {
 
@@ -20,6 +23,10 @@ class LocalDnsVpnService : VpnService() {
 
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
+
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    @Volatile
+    private var activeDnsServers: List<InetAddress> = emptyList()
 
     override fun onCreate() {
         super.onCreate()
@@ -56,11 +63,65 @@ class LocalDnsVpnService : VpnService() {
         }
     }
 
+    private fun discoverPhysicalDnsServers(): List<InetAddress> {
+        val cm = getSystemService(ConnectivityManager::class.java) ?: return emptyList()
+        val network = cm.activeNetwork ?: return emptyList()
+        val lp = cm.getLinkProperties(network) ?: return emptyList()
+        return lp.dnsServers
+    }
+
+    private fun registerNetworkTracker() {
+        val cm = getSystemService(ConnectivityManager::class.java) ?: return
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
+
+        networkCallback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                setUnderlyingNetworks(arrayOf(network))
+                activeDnsServers = discoverPhysicalDnsServers()
+            }
+
+            override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) {
+                setUnderlyingNetworks(arrayOf(network))
+                activeDnsServers = linkProperties.dnsServers
+            }
+
+            override fun onLost(network: Network) {
+                setUnderlyingNetworks(null)
+                activeDnsServers = emptyList()
+            }
+        }
+
+        try {
+            cm.registerNetworkCallback(request, networkCallback!!)
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to register network callback for link properties tracking", e)
+        }
+    }
+
+    private fun unregisterNetworkTracker() {
+        networkCallback?.let {
+            val cm = getSystemService(ConnectivityManager::class.java)
+            try {
+                cm?.unregisterNetworkCallback(it)
+            } catch (ignored: Exception) {}
+        }
+        networkCallback = null
+    }
+
     private fun startVpn() {
         if (isRunning) return
 
         try {
             loadBlocklists()
+            registerNetworkTracker()
+
+            val cm = getSystemService(ConnectivityManager::class.java)
+            val currentNetwork = cm?.activeNetwork
+            if (currentNetwork != null) {
+                setUnderlyingNetworks(arrayOf(currentNetwork))
+            }
 
             val builder = Builder()
                 .setSession("FamilyGuard")
@@ -68,15 +129,27 @@ class LocalDnsVpnService : VpnService() {
                 .addDnsServer("10.254.1.1")
                 .addRoute("10.254.1.1", 32)
 
-            // Intercept direct queries to public resolvers (prevents Chrome & apps from bypassing VPN)
-            val publicDnsRoutes = listOf(
-                "1.1.1.1", "1.0.0.1",         // Cloudflare
-                "8.8.8.8", "8.8.4.4",         // Google
-                "9.9.9.9", "149.112.112.112",   // Quad9
-                "208.67.222.222", "208.67.220.220" // OpenDNS
+            // 1. Dynamically route all physical DNS servers discovered from underlying network
+            activeDnsServers = discoverPhysicalDnsServers()
+            for (dns in activeDnsServers) {
+                when (dns) {
+                    is Inet4Address -> builder.addRoute(dns, 32)
+                    is Inet6Address -> builder.addRoute(dns, 128)
+                }
+            }
+
+            // 2. Route common public resolvers used by browser DNS prefetchers (RFC 6890)
+            val commonResolvers = listOf(
+                InetAddress.getByAddress(byteArrayOf(1, 1, 1, 1)),
+                InetAddress.getByAddress(byteArrayOf(1, 0, 0, 1)),
+                InetAddress.getByAddress(byteArrayOf(8, 8, 8, 8)),
+                InetAddress.getByAddress(byteArrayOf(8, 8, 4, 4)),
+                InetAddress.getByAddress(byteArrayOf(9, 9, 9, 9))
             )
-            for (dnsIp in publicDnsRoutes) {
-                builder.addRoute(dnsIp, 32)
+            for (resolver in commonResolvers) {
+                if (resolver is Inet4Address) {
+                    builder.addRoute(resolver, 32)
+                }
             }
 
             builder.setBlocking(true)
@@ -86,6 +159,7 @@ class LocalDnsVpnService : VpnService() {
 
             startPacketProcessingLoop()
         } catch (e: Exception) {
+            Log.e(TAG, "Fatal: unable to establish VPN interface", e)
             stopVpn()
         }
     }
@@ -109,7 +183,7 @@ class LocalDnsVpnService : VpnService() {
                     val filterResult = filterTrie.match(query.domain)
 
                     if (filterResult.isBlocked) {
-                        // 1. Synthesize 0.0.0.0 Sinkhole response
+                        // Synthesize 0.0.0.0 Sinkhole response
                         val sinkholePayload = DnsPacketParser.buildSinkholeResponse(query)
                         val responsePacket = IpPacketHelper.buildUdpResponsePacket(dnsContext, sinkholePayload)
 
@@ -119,18 +193,19 @@ class LocalDnsVpnService : VpnService() {
                             } catch (ignored: IOException) {}
                         }
 
-                        // 2. Trigger non-blocking Heads-Up Notification (throttled)
+                        // Trigger direct full-screen advisory and high-priority notification
                         ThreatNotifier.notifyThreatBlocked(
                             this@LocalDnsVpnService,
                             query.domain,
                             filterResult.category ?: "Ancaman Keamanan"
                         )
                     } else {
-                        // Forward legitimate queries to protected upstream DNS servers
+                        // Forward legitimate queries dynamically to physical/upstream DNS
                         launch {
                             val upstreamResponse = DnsUpstreamForwarder.forward(
                                 this@LocalDnsVpnService,
-                                dnsContext.dnsPayload
+                                dnsContext.dnsPayload,
+                                activeDnsServers
                             )
                             if (upstreamResponse != null) {
                                 val responsePacket = IpPacketHelper.buildUdpResponsePacket(dnsContext, upstreamResponse)
@@ -153,6 +228,7 @@ class LocalDnsVpnService : VpnService() {
 
     private fun stopVpn() {
         isRunning = false
+        unregisterNetworkTracker()
         serviceJob.cancelChildren()
 
         try {
