@@ -2,36 +2,47 @@ package id.familyguard.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Light Palette
-val BackgroundLight = Color(0xFFF8FAFC)
+// Pure Monochromatic Palette (OLED Black / Clean Paper White)
+val BgDark = Color(0xFF000000)
+val SurfaceDark = Color(0xFF000000)
+val BandDark = Color(0xFF121214)
+val BorderDark = Color(0xFF1C1C1E)
+val TextPrimaryDark = Color(0xFFFFFFFF)
+val TextSecondaryDark = Color(0xFF8E8E93)
+
+val BgLight = Color(0xFFFFFFFF)
 val SurfaceLight = Color(0xFFFFFFFF)
-val SurfaceSubtleLight = Color(0xFFF1F5F9)
-val BorderLight = Color(0xFFE2E8F0)
+val BandLight = Color(0xFFF4F4F6)
+val BorderLight = Color(0xFFE5E5EA)
+val TextPrimaryLight = Color(0xFF000000)
+val TextSecondaryLight = Color(0xFF8E8E93)
 
-val TextPrimaryLight = Color(0xFF0F172A)
-val TextSecondaryLight = Color(0xFF475569)
-val TextMutedLight = Color(0xFF94A3B8)
+// Accents
+val ToggleBlue = Color(0xFF3B57FA)
+val AccentOrange = Color(0xFFF38020)
+val TagQuarantine = Color(0xFFF59E0B)
+val TagBlocked = Color(0xFFEF4444)
 
-// Dark Palette
-val BackgroundDark = Color(0xFF0F172A)
-val SurfaceDark = Color(0xFF1E293B)
-val SurfaceSubtleDark = Color(0xFF243046)
-val BorderDark = Color(0xFF334155)
+// Backward Compatibility Aliases
+val BackgroundLight = BgLight
+val SurfaceSubtleLight = BandLight
+val BorderLightAlias = BorderLight
+val TextMutedLight = TextSecondaryLight
 
-val TextPrimaryDark = Color(0xFFF8FAFC)
-val TextSecondaryDark = Color(0xFFCBD5E1)
-val TextMutedDark = Color(0xFF64748B)
+val BackgroundDark = BgDark
+val SurfaceSubtleDark = BandDark
+val BorderDarkAlias = BorderDark
+val TextMutedDark = TextSecondaryDark
 
-// Semantic Accents
-val EmeraldPrimary = Color(0xFF059669)
-val EmeraldLight = Color(0xFF10B981)
-val EmeraldSoftBg = Color(0xFFECFDF5)
-val EmeraldDarkBg = Color(0xFF064E3B).copy(alpha = 0.35f)
+val EmeraldPrimary = ToggleBlue
+val EmeraldLight = ToggleBlue
+val EmeraldSoftBg = BandLight
+val EmeraldDarkBg = BandDark
 
-val RosePrimary = Color(0xFFE11D48)
-val RoseSoftBg = Color(0xFFFFF1F2)
-val RoseDarkBg = Color(0xFF4C0519).copy(alpha = 0.35f)
+val RosePrimary = TagBlocked
+val RoseSoftBg = BandLight
+val RoseDarkBg = BandDark
 
-val BluePrimary = Color(0xFF2563EB)
-val BlueSoftBg = Color(0xFFEFF6FF)
-val BlueDarkBg = Color(0xFF1E3A8A).copy(alpha = 0.35f)
+val BluePrimary = ToggleBlue
+val BlueSoftBg = BandLight
+val BlueDarkBg = BandDark

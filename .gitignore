@@ -46,3 +46,6 @@ Thumbs.db
 .pi/
 .claude/
 skills-lock.json
+.agents/
+.graphifyignore
+graphify-out/

@@ -10,39 +10,39 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val LightColorScheme = lightColorScheme(
-    primary = EmeraldPrimary,
-    onPrimary = SurfaceLight,
-    primaryContainer = EmeraldSoftBg,
-    onPrimaryContainer = EmeraldPrimary,
-    secondary = BluePrimary,
-    onSecondary = SurfaceLight,
-    background = BackgroundLight,
+    primary = ToggleBlue,
+    onPrimary = BgLight,
+    primaryContainer = BandLight,
+    onPrimaryContainer = TextPrimaryLight,
+    secondary = AccentOrange,
+    onSecondary = BgLight,
+    background = BgLight,
     onBackground = TextPrimaryLight,
     surface = SurfaceLight,
     onSurface = TextPrimaryLight,
-    surfaceVariant = SurfaceSubtleLight,
+    surfaceVariant = BandLight,
     onSurfaceVariant = TextSecondaryLight,
     outline = BorderLight,
-    error = RosePrimary,
-    onError = SurfaceLight
+    error = TagBlocked,
+    onError = BgLight
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary = EmeraldLight,
-    onPrimary = BackgroundDark,
-    primaryContainer = EmeraldDarkBg,
-    onPrimaryContainer = EmeraldLight,
-    secondary = BluePrimary,
-    onSecondary = SurfaceDark,
-    background = BackgroundDark,
+    primary = ToggleBlue,
+    onPrimary = TextPrimaryDark,
+    primaryContainer = BandDark,
+    onPrimaryContainer = TextPrimaryDark,
+    secondary = AccentOrange,
+    onSecondary = BgDark,
+    background = BgDark,
     onBackground = TextPrimaryDark,
     surface = SurfaceDark,
     onSurface = TextPrimaryDark,
-    surfaceVariant = SurfaceSubtleDark,
+    surfaceVariant = BandDark,
     onSurfaceVariant = TextSecondaryDark,
     outline = BorderDark,
-    error = RosePrimary,
-    onError = SurfaceDark
+    error = TagBlocked,
+    onError = BgDark
 )
 
 @Composable
