@@ -12,8 +12,8 @@ android {
         applicationId = "id.familyguard"
         minSdk = 26
         targetSdk = 34
-        versionCode = 9
-        versionName = "1.8.1"
+        versionCode = 10
+        versionName = "1.8.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

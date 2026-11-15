@@ -31,12 +31,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import id.familyguard.R
 import id.familyguard.data.AppPreferencesRepository
 import id.familyguard.dns.LocalDnsVpnService
 import id.familyguard.ui.theme.*
@@ -424,10 +426,9 @@ private fun MainScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Default.Shield,
+            Image(
+                painter = painterResource(id = R.drawable.ic_signature_shield),
                 contentDescription = "FamilyGuard Logo",
-                tint = MaterialTheme.colorScheme.onBackground,
                 modifier = Modifier.size(32.dp)
             )
 
@@ -453,10 +454,9 @@ private fun MainScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.Shield,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onBackground,
+            Image(
+                painter = painterResource(id = R.drawable.ic_signature_shield),
+                contentDescription = "FamilyGuard Signature Logo",
                 modifier = Modifier.size(68.dp)
             )
             Column {
@@ -696,7 +696,7 @@ private fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
-                    text = "1.8.1 (9)",
+                    text = "1.8.2 (10)",
                     fontSize = 15.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
