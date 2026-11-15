@@ -9,8 +9,9 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.*
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -27,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -160,6 +162,13 @@ fun FamilyGuardAppUI(
         }
     }
 
+    // Refresh logs on screen entry
+    LaunchedEffect(currentScreen) {
+        if (currentScreen == AppScreen.LOGS) {
+            recentThreats = prefs.getRecentThreats()
+        }
+    }
+
     // Hardware Back Navigation
     BackHandler(enabled = currentScreen != AppScreen.MAIN) {
         when (currentScreen) {
@@ -169,52 +178,74 @@ fun FamilyGuardAppUI(
         }
     }
 
-    AnimatedContent(
-        targetState = currentScreen,
-        transitionSpec = {
-            if (targetState.ordinal > initialState.ordinal) {
-                slideInHorizontally(
-                    initialOffsetX = { it },
-                    animationSpec = tween(300)
-                ) + fadeIn(animationSpec = tween(300)) togetherWith
-                slideOutHorizontally(
-                    targetOffsetX = { -it / 3 },
-                    animationSpec = tween(300)
-                ) + fadeOut(animationSpec = tween(300))
-            } else {
-                slideInHorizontally(
-                    initialOffsetX = { -it / 3 },
-                    animationSpec = tween(300)
-                ) + fadeIn(animationSpec = tween(300)) togetherWith
-                slideOutHorizontally(
-                    targetOffsetX = { it },
-                    animationSpec = tween(300)
-                ) + fadeOut(animationSpec = tween(300))
-            }
-        },
-        label = "screen_transition"
-    ) { screen ->
-        when (screen) {
-            AppScreen.MAIN -> {
-                MainScreen(
-                    isProtected = isFullyProtected,
-                    onToggleMaster = { enable ->
-                        if (enable) {
-                            onStartDnsVpn { intent -> vpnLauncher.launch(intent) }
-                            isDnsActive = true
-                            onToggleWatchdog(true)
-                            isWatchdogActive = true
-                        } else {
-                            onStopDnsVpn()
-                            isDnsActive = false
-                            onToggleWatchdog(false)
-                            isWatchdogActive = false
-                        }
-                    },
-                    onOpenSettings = { currentScreen = AppScreen.SETTINGS }
-                )
-            }
-            AppScreen.SETTINGS -> {
+    // Zero-overhead hardware accelerated sliding stage
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        val widthPx = constraints.maxWidth.toFloat()
+
+        val mainOffset by animateFloatAsState(
+            targetValue = when (currentScreen) {
+                AppScreen.MAIN -> 0f
+                else -> -widthPx * 0.3f
+            },
+            animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+            label = "mainOffset"
+        )
+
+        val settingsOffset by animateFloatAsState(
+            targetValue = when (currentScreen) {
+                AppScreen.MAIN -> widthPx
+                AppScreen.SETTINGS -> 0f
+                AppScreen.LOGS -> -widthPx * 0.3f
+            },
+            animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+            label = "settingsOffset"
+        )
+
+        val logsOffset by animateFloatAsState(
+            targetValue = when (currentScreen) {
+                AppScreen.LOGS -> 0f
+                else -> widthPx
+            },
+            animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+            label = "logsOffset"
+        )
+
+        // 1. Main Screen
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { translationX = mainOffset }
+        ) {
+            MainScreen(
+                isProtected = isFullyProtected,
+                onToggleMaster = { enable ->
+                    if (enable) {
+                        onStartDnsVpn { intent -> vpnLauncher.launch(intent) }
+                        isDnsActive = true
+                        onToggleWatchdog(true)
+                        isWatchdogActive = true
+                    } else {
+                        onStopDnsVpn()
+                        isDnsActive = false
+                        onToggleWatchdog(false)
+                        isWatchdogActive = false
+                    }
+                },
+                onOpenSettings = { currentScreen = AppScreen.SETTINGS }
+            )
+        }
+
+        // 2. Settings Screen
+        if (currentScreen != AppScreen.MAIN || settingsOffset < widthPx) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { translationX = settingsOffset }
+            ) {
                 SettingsScreen(
                     isDnsActive = isDnsActive,
                     onToggleDns = { enable ->
@@ -233,14 +264,19 @@ fun FamilyGuardAppUI(
                     },
                     onOpenPin = { showPinDialog = true },
                     onOpenWhitelist = { showWhitelistDialog = true },
-                    onOpenLogs = {
-                        recentThreats = prefs.getRecentThreats()
-                        currentScreen = AppScreen.LOGS
-                    },
+                    onOpenLogs = { currentScreen = AppScreen.LOGS },
                     onBack = { currentScreen = AppScreen.MAIN }
                 )
             }
-            AppScreen.LOGS -> {
+        }
+
+        // 3. Logs Screen
+        if (currentScreen == AppScreen.LOGS || logsOffset < widthPx) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { translationX = logsOffset }
+            ) {
                 LogsScreen(
                     threats = recentThreats,
                     onBack = { currentScreen = AppScreen.SETTINGS }
@@ -378,12 +414,13 @@ private fun MainScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // Minimal Top Header
+        // 1. Minimal Top Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(horizontal = 24.dp, vertical = 8.dp),
+                .height(56.dp)
+                .padding(horizontal = 24.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -391,88 +428,97 @@ private fun MainScreen(
                 imageVector = Icons.Default.Shield,
                 contentDescription = "FamilyGuard Logo",
                 tint = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.size(26.dp)
+                modifier = Modifier.size(32.dp)
             )
 
             IconButton(
                 onClick = onOpenSettings,
-                modifier = Modifier.size(36.dp)
+                modifier = Modifier.size(48.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Menu,
                     contentDescription = "Pengaturan",
                     tint = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(28.dp)
                 )
             }
         }
 
-        // Center Hero
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+        // 2. Upper-third Golden Ratio Anchor (matching Cloudflare reference)
+        Spacer(modifier = Modifier.height(48.dp))
+
+        // 3. Hero Brand Lockup
+        Row(
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Shield,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.size(48.dp)
+            Icon(
+                imageVector = Icons.Default.Shield,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.size(68.dp)
+            )
+            Column {
+                Text(
+                    text = "FamilyGuard",
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    letterSpacing = (-0.5).sp,
+                    lineHeight = 34.sp
                 )
-                Column {
-                    Text(
-                        text = "FamilyGuard",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        text = "Proteksi Keluarga",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Text(
+                    text = "Proteksi Keluarga",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    letterSpacing = (-0.3).sp
+                )
             }
-
-            Spacer(modifier = Modifier.height(36.dp))
-
-            CloudflareMasterSwitch(
-                checked = isProtected,
-                onCheckedChange = onToggleMaster
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                text = if (isProtected) "Ponsel Terlindungi" else "Perlindungan Nonaktif",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = if (isProtected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Text(
-                text = if (isProtected) {
-                    "Perlindungan web dan pengawas unduhan aktif melindungi keluarga."
-                } else {
-                    "Ponsel saat ini tidak terlindungi dari situs dan file berbahaya."
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.widthIn(max = 260.dp)
-            )
         }
 
+        // 4. Spacer between hero and switch
+        Spacer(modifier = Modifier.height(36.dp))
+
+        // 5. Oversized Tactile Master Switch
+        CloudflareMasterSwitch(
+            checked = isProtected,
+            onCheckedChange = onToggleMaster,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
+
+        // 6. Spacer before status text
+        Spacer(modifier = Modifier.height(28.dp))
+
+        // 7. Status Text
+        Text(
+            text = if (isProtected) "Ponsel Terlindungi" else "Perlindungan Nonaktif",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = if (isProtected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = if (isProtected) {
+                "Perlindungan web dan pengawas unduhan aktif melindungi keluarga."
+            } else {
+                "Ponsel saat ini tidak terlindungi dari situs dan file berbahaya."
+            },
+            fontSize = 15.sp,
+            lineHeight = 22.sp,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .align(Alignment.CenterHorizontally)
+                .widthIn(max = 300.dp)
+        )
+
+        // 8. Generous calm negative space in lower 45%
+        Spacer(modifier = Modifier.weight(1f))
         Spacer(modifier = Modifier.navigationBarsPadding())
     }
 }
@@ -483,22 +529,22 @@ private fun CloudflareMasterSwitch(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val knobOffset by animateDpAsState(
-        targetValue = if (checked) 52.dp else 0.dp,
-        animationSpec = tween(durationMillis = 300),
+    val knobOffset by animateFloatAsState(
+        targetValue = if (checked) 70f else 0f,
+        animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
         label = "knobOffset"
     )
 
-    val bgColor = if (checked) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.outline
-    }
+    val bgColor by animateColorAsState(
+        targetValue = if (checked) MaterialTheme.colorScheme.primary else Color(0xFF2C2C2E),
+        animationSpec = tween(durationMillis = 260),
+        label = "switchBg"
+    )
 
     Box(
         modifier = modifier
-            .width(114.dp)
-            .height(62.dp)
+            .width(154.dp)
+            .height(84.dp)
             .clip(RoundedCornerShape(999.dp))
             .background(bgColor)
             .clickable(
@@ -507,13 +553,13 @@ private fun CloudflareMasterSwitch(
             ) {
                 onCheckedChange(!checked)
             }
-            .padding(6.dp),
+            .padding(7.dp),
         contentAlignment = Alignment.CenterStart
     ) {
         Box(
             modifier = Modifier
-                .offset(x = knobOffset)
-                .size(50.dp)
+                .offset(x = knobOffset.dp)
+                .size(70.dp)
                 .clip(CircleShape)
                 .background(Color.White)
         )
@@ -541,21 +587,25 @@ private fun SettingsScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .height(56.dp)
+                .height(64.dp)
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            IconButton(onClick = onBack) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier.size(48.dp)
+            ) {
                 Icon(
                     imageVector = Icons.Default.ArrowBack,
                     contentDescription = "Kembali",
-                    tint = MaterialTheme.colorScheme.onBackground
+                    tint = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.size(26.dp)
                 )
             }
             Text(
                 text = "Pengaturan",
-                style = MaterialTheme.typography.titleLarge,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground
             )
@@ -592,7 +642,7 @@ private fun SettingsScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(12.dp)
+                    .height(14.dp)
                     .background(MaterialTheme.colorScheme.surfaceVariant)
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 1.dp)
@@ -626,7 +676,7 @@ private fun SettingsScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(12.dp)
+                    .height(14.dp)
                     .background(MaterialTheme.colorScheme.surfaceVariant)
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outline, thickness = 1.dp)
@@ -635,19 +685,19 @@ private fun SettingsScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 18.dp),
+                    .padding(horizontal = 20.dp, vertical = 20.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = "Versi Aplikasi",
-                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
-                    text = "1.8.0 (8)",
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = "1.8.1 (9)",
+                    fontSize = 15.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -669,7 +719,7 @@ private fun SettingsFeatureRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onToggle)
-            .padding(horizontal = 20.dp, vertical = 18.dp),
+            .padding(horizontal = 20.dp, vertical = 20.dp),
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -683,22 +733,22 @@ private fun SettingsFeatureRow(
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onBackground,
                 modifier = Modifier
-                    .size(22.dp)
+                    .size(26.dp)
                     .padding(top = 2.dp)
             )
             Column {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 18.sp
+                    lineHeight = 19.sp
                 )
             }
         }
@@ -707,7 +757,7 @@ private fun SettingsFeatureRow(
                 imageVector = Icons.Default.Check,
                 contentDescription = "Aktif",
                 tint = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(24.dp)
             )
         }
     }
@@ -723,21 +773,21 @@ private fun SettingsNavRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 16.dp),
+            .padding(horizontal = 20.dp, vertical = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyLarge,
+                fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onBackground
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
+                fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -745,7 +795,7 @@ private fun SettingsNavRow(
             imageVector = Icons.Default.ChevronRight,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(22.dp)
         )
     }
 }
@@ -767,21 +817,25 @@ private fun LogsScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .height(56.dp)
+                .height(64.dp)
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            IconButton(onClick = onBack) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier.size(48.dp)
+            ) {
                 Icon(
                     imageVector = Icons.Default.ArrowBack,
                     contentDescription = "Kembali",
-                    tint = MaterialTheme.colorScheme.onBackground
+                    tint = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.size(26.dp)
                 )
             }
             Text(
                 text = "Riwayat Keamanan",
-                style = MaterialTheme.typography.titleLarge,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground
             )
@@ -791,10 +845,11 @@ private fun LogsScreen(
 
         Text(
             text = "AKTIVITAS TERBARU",
-            style = MaterialTheme.typography.labelSmall,
+            fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+            letterSpacing = 0.5.sp
         )
 
         if (threats.isEmpty()) {
@@ -806,7 +861,7 @@ private fun LogsScreen(
             ) {
                 Text(
                     text = "Belum ada catatan ancaman.",
-                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 15.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -843,7 +898,7 @@ private fun LogsScreen(
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = "${record.category} • $timeStr",
-                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -855,11 +910,11 @@ private fun LogsScreen(
                                     if (isQuarantine) TagQuarantine.copy(alpha = 0.15f)
                                     else TagBlocked.copy(alpha = 0.15f)
                                 )
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
                         ) {
                             Text(
                                 text = if (isQuarantine) "DIKARANTINA" else "DIBLOKIR",
-                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (isQuarantine) TagQuarantine else TagBlocked,
                                 letterSpacing = 0.5.sp
@@ -873,7 +928,7 @@ private fun LogsScreen(
                 item {
                     Text(
                         text = "Semua catatan disimpan aman di ponsel ini.",
-                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                         modifier = Modifier
