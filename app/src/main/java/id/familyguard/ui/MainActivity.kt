@@ -696,7 +696,7 @@ private fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
-                    text = "1.8.2 (10)",
+                    text = "1.8.3 (11)",
                     fontSize = 15.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
