@@ -831,7 +831,7 @@ private fun LogsScreen(
                         Column(
                             modifier = Modifier
                                 .weight(1f)
-                                .padding(right = 12.dp)
+                                .padding(end = 12.dp)
                         ) {
                             Text(
                                 text = record.domain,
